@@ -51,6 +51,7 @@
 #include <osl/extensions/coordinates.h>
 #include <osl/extensions/clay.h>
 #include <osl/extensions/extbody.h>
+#include <osl/extensions/identifier.h>
 #include <osl/generic.h>
 #include <osl/body.h>
 #include <osl/scop.h>
@@ -82,7 +83,9 @@ osl_scop_p clan_parse(FILE*, clan_options_p);
  * \param options Options for file parsing.
  */
 osl_scop_p clan_scop_extract(FILE* input, clan_options_p options) {
-  return clan_parse(input, options);
+  osl_scop_p scop = clan_parse(input, options);
+  osl_identifier_generate(scop);
+  return scop;
 }
 
 
