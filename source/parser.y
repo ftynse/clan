@@ -145,7 +145,7 @@
 %}
 
 /* We expect the if-then-else shift/reduce to be there, nothing else. */
-%expect 8 // TODO: should be 1 !!! (cause : labeled_statement)
+%expect 15 // TODO: should be 1 !!! (cause : labeled_statement, maybe_labeled_statement)
 
 %union { int value;                      /**< An integer value */
          int* vecint;                    /**< A vector of integer values */
@@ -179,6 +179,7 @@
 %type <stmt>   statement_indented
 %type <stmt>   statement
 %type <stmt>   labeled_statement
+%type <stmt>   maybe_labeled_statement
 %type <stmt>   compound_statement
 %type <stmt>   expression_statement
 %type <stmt>   selection_else_statement
@@ -333,7 +334,7 @@ statement_indented:
 statement:
     labeled_statement        { $$ = $1; }
   | compound_statement       { $$ = $1; }
-  | expression_statement     { $$ = $1; }
+  | maybe_labeled_statement  { $$ = $1; }
   | selection_statement      { $$ = $1; }
   | {
       if (parser_options->autoscop && !parser_autoscop && !parser_loop_depth) {
@@ -361,6 +362,36 @@ statement:
     }
 ;
 
+maybe_labeled_statement:
+    ID ':' expression_statement
+    {
+      $$ = $3;
+
+      osl_body_p body =
+          (osl_body_p) osl_generic_lookup($$->extension, OSL_URI_BODY);
+      size_t length = strlen(body->expression->string[0]) + strlen($1) + 3;
+      char *catenated_str;
+      CLAN_malloc(catenated_str, char *, sizeof(char) * length);
+      strncpy(catenated_str, $1, length);
+      strncat(catenated_str, ": ", length);
+      strncat(catenated_str, body->expression->string[0], length);
+      free(body->expression->string[0]);
+      body->expression->string[0] = catenated_str;
+
+      if (parser_options->extbody) {
+        osl_extbody_p extbody =
+            (osl_extbody_p) osl_generic_lookup($$->extension, OSL_URI_EXTBODY);
+        osl_strings_free(extbody->body->expression);
+        extbody->body->expression = osl_strings_clone(body->expression);
+      }
+
+      osl_strings_p stmt_name = osl_strings_encapsulate($1);
+      osl_generic_p stmt_name_gen = osl_generic_shell(stmt_name,
+                                        osl_strings_interface());
+      osl_generic_add(&($$->extension), stmt_name_gen);
+    }
+  | expression_statement         { $$ = $1; }
+  ;
 
 labeled_statement:
     INTEGER ':' 
