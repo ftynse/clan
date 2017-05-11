@@ -56,6 +56,7 @@ struct osl_scop;
  *                            Processing functions                            *
  ******************************************************************************/
 struct osl_scop* clan_scop_extract(FILE*, clan_options_p);
+struct osl_scop* clan_scop_extract_str(const char *, clan_options_p);
 void             clan_scop_compact(struct osl_scop*);
 void             clan_scop_print(FILE*, struct osl_scop*, clan_options_p);
 void             clan_scop_generate_scatnames(struct osl_scop*);
