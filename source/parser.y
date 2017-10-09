@@ -77,6 +77,11 @@
    void clan_scanner_reinitialize(int, int, int);
    void clan_scanner_free();
 
+   struct yy_buffer_state;
+   typedef struct yy_buffer_state* YY_BUFFER_STATE;
+   void yy_delete_buffer(YY_BUFFER_STATE);
+   YY_BUFFER_STATE yy_scan_string(const char*);
+
    void clan_parser_add_ld();
    int  clan_parser_nb_ld();
    void clan_parser_log(char*);
@@ -140,7 +145,7 @@
 %}
 
 /* We expect the if-then-else shift/reduce to be there, nothing else. */
-%expect 8 // TODO: should be 1 !!! (cause : labeled_statement)
+%expect 15 // TODO: should be 1 !!! (cause : labeled_statement, maybe_labeled_statement)
 
 %union { int value;                      /**< An integer value */
          int* vecint;                    /**< A vector of integer values */
@@ -174,6 +179,7 @@
 %type <stmt>   statement_indented
 %type <stmt>   statement
 %type <stmt>   labeled_statement
+%type <stmt>   maybe_labeled_statement
 %type <stmt>   compound_statement
 %type <stmt>   expression_statement
 %type <stmt>   selection_else_statement
@@ -328,7 +334,7 @@ statement_indented:
 statement:
     labeled_statement        { $$ = $1; }
   | compound_statement       { $$ = $1; }
-  | expression_statement     { $$ = $1; }
+  | maybe_labeled_statement  { $$ = $1; }
   | selection_statement      { $$ = $1; }
   | {
       if (parser_options->autoscop && !parser_autoscop && !parser_loop_depth) {
@@ -356,6 +362,36 @@ statement:
     }
 ;
 
+maybe_labeled_statement:
+    ID ':' expression_statement
+    {
+      $$ = $3;
+
+      osl_body_p body =
+          (osl_body_p) osl_generic_lookup($$->extension, OSL_URI_BODY);
+      size_t length = strlen(body->expression->string[0]) + strlen($1) + 3;
+      char *catenated_str;
+      CLAN_malloc(catenated_str, char *, sizeof(char) * length);
+      strncpy(catenated_str, $1, length);
+      strncat(catenated_str, ": ", length);
+      strncat(catenated_str, body->expression->string[0], length);
+      free(body->expression->string[0]);
+      body->expression->string[0] = catenated_str;
+
+      if (parser_options->extbody) {
+        osl_extbody_p extbody =
+            (osl_extbody_p) osl_generic_lookup($$->extension, OSL_URI_EXTBODY);
+        osl_strings_free(extbody->body->expression);
+        extbody->body->expression = osl_strings_clone(body->expression);
+      }
+
+      osl_strings_p stmt_name = osl_strings_encapsulate($1);
+      osl_generic_p stmt_name_gen = osl_generic_shell(stmt_name,
+                                        osl_strings_interface());
+      osl_generic_add(&($$->extension), stmt_name_gen);
+    }
+  | expression_statement         { $$ = $1; }
+  ;
 
 labeled_statement:
     INTEGER ':' 
@@ -2408,22 +2444,27 @@ void clan_parser_autoscop() {
     CLAN_warning("cannot delete temporary file");
 }
 
-
 /**
- * clan_parse function:
- * this function parses a file to extract a SCoP and returns, if successful,
- * a pointer to the osl_scop_t structure.
- * \param input   The file to parse (already open).
- * \param options Options for file parsing.
+ * clan_initialize_all function:
+ * Initialize parser and lexer.
+ * \param [in] options  Parsing options.
  */
-osl_scop_p clan_parse(FILE* input, clan_options_p options) {
-  osl_scop_p scop;
-  yyin = input;
-
+static void clan_initialize_all(clan_options_p options) {
   clan_parser_state_malloc(options->precision);
   clan_parser_state_initialize(options);
   clan_scanner_initialize();
-  yyrestart(yyin);  //restart scanning another file
+}
+
+/**
+ * clan_call_parser function:
+ * Call parser after it has been initialized and its buffer has been properly
+ * set up.
+ * \param [in] options  Parsing options.
+ * \return A parsed SCoP if parsing successfull, \c NULL otherwise.
+ */
+static osl_scop_p clan_call_parser(clan_options_p options) {
+  osl_scop_p scop;
+
   parser_scop = NULL;
 
   if (!options->autoscop)
@@ -2442,6 +2483,36 @@ osl_scop_p clan_parse(FILE* input, clan_options_p options) {
 
   clan_parser_state_free();
   CLAN_debug("parser state successfully freed");
+  return scop;
+}
 
+
+/**
+ * clan_parse function:
+ * this function parses a file to extract a SCoP and returns, if successful,
+ * a pointer to the osl_scop_t structure.
+ * \param input   The file to parse (already open).
+ * \param options Options for file parsing.
+ */
+osl_scop_p clan_parse(FILE* input, clan_options_p options) {
+  yyin = input;
+  clan_initialize_all(options);
+  yyrestart(yyin);  //restart scanning another file
+  return clan_call_parser(options);
+}
+
+/**
+ * clan_parse_string function:
+ * Parses a string to extract a SCoP.
+ * \param [in] str    The string to parse.
+ * \param [in] optons Options for parsing.
+ * \returns A new SCoP if successfull, \c NULL otherwise.
+ */
+osl_scop_p clan_parse_string(const char *str, clan_options_p options) {
+  osl_scop_p scop;
+
+  clan_initialize_all(options);
+  YY_BUFFER_STATE buffer = yy_scan_string(str);
+  scop = clan_call_parser(options);
   return scop;
 }

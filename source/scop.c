@@ -72,6 +72,7 @@ extern int parser_indent;
  ******************************************************************************/
 
 osl_scop_p clan_parse(FILE*, clan_options_p);
+osl_scop_p clan_parse_string(const char *, clan_options_p);
 
 /**
  * clan_scop_extract function:
@@ -83,6 +84,18 @@ osl_scop_p clan_parse(FILE*, clan_options_p);
  */
 osl_scop_p clan_scop_extract(FILE* input, clan_options_p options) {
   return clan_parse(input, options);
+}
+
+/**
+ * clan_scop_extract_str function:
+ * this function is a wrapper to the clan_parse_string function that parses a C
+ * string to extract a SCoP and returns, if successful, a pointer to the
+ * osl_scop_t structure.
+ * \param str	  A string to parse.
+ * \param options Options for file parsing.
+ */
+osl_scop_p clan_scop_extract_str(const char *str, clan_options_p options) {
+  return clan_parse_string(str, options);
 }
 
 
